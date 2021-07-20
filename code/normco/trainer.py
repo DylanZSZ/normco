@@ -19,7 +19,7 @@ from utils import text_processing
 th.manual_seed(7)
 np.random.seed(7)
 
-class WrappedNormco:
+class NormCoTrainer:
     # @staticmethod
     # def add_args(parser):
     #     parser.add_argument('--model', type=str, help='The RNN type for coherence',
