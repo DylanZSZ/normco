@@ -26,14 +26,14 @@ class PreprocessedDataset(Dataset):
     Dataset reader (preprocess and transform into tensors)
     '''
 
-    def __init__(self, concept_dict, synonym_file, num_neg, vocab_dict=None, use_features=False):
+    def __init__(self, concept_dict,data_dict, num_neg, vocab_dict=None, use_features=False):
 
         # Load the concept, vocab, and character dictionaries
-        self.concept_dict = pd.read_csv(concept_dict, sep='\t', header=None, comment='#').fillna('')
-        self.nconcepts = self.concept_dict.shape[0]
+        self.concept_dict=concept_dict
+        self.nconcepts = len(self.concept_dict.keys())
 
         # Load the training triples
-        self.textdb = np.load(synonym_file)
+        self.textdb = data_dict
         self.words = self.textdb['words']
         self.lens = self.textdb['lens']
         self.disease_ids = self.textdb['ids']  # What is disease id and is it the same as id file
@@ -42,7 +42,7 @@ class PreprocessedDataset(Dataset):
         if 'usefeatures' in self.textdb:
             self.features_flags = self.textdb['usefeatures']
 
-        self.id_dict = {k: i for i, k in enumerate(self.concept_dict.values[:, 1])}
+        self.id_dict = {i: k for k, i in self.concept_dict.items()}
         if vocab_dict:
             self.id_vocab = {i: k for k, i in vocab_dict.items()}
         if use_features:

@@ -148,10 +148,10 @@ class NormCoTrainer:
         if args.weight_init:
             model.load_state_dict(th.load(args.weight_init))
         return model,optimizer,loss
-    def train(self,args):
-        self._train(self.model,self.optimizer,self.loss,**args)
+    def train(self,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid):
+        self._train(self.model,self.optimizer,self.loss,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid,**args)
 
-    def _train(self,model, optimizer, loss_fn,mention_loader, dict_loader, coherence_loader, distant_loader, fakes_loader,
+    def _train(self,model, optimizer, loss_fn,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid,
               log_dir='./tb', n_epochs=100, save_every=1, save_file_name='model.pth', eval_data=None, eval_every=10,
               logfile=None, use_coherence=True):
         '''
@@ -188,9 +188,7 @@ class NormCoTrainer:
                 model.train()
                 gc.collect()
 
-            # Epoch loops
-            # Dictionary data
-            for mb in tqdm(dict_loader, desc='Epoch %d' % e):
+            for mb in tqdm(mention_train_loader, desc='Epoch %d' % e):
                 mb['words'] = Variable(th.stack(mb['words'], 0))
                 mb['lens'] = Variable(th.cat(mb['lens'], 0))
                 mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
@@ -211,73 +209,30 @@ class NormCoTrainer:
                 optimizer.step()
 
                 step += 1
-            # Mention data
-            for mb in tqdm(mention_loader, desc='Epoch %d' % e):
-                mb['words'] = Variable(th.stack(mb['words'], 0))
-                mb['lens'] = Variable(th.cat(mb['lens'], 0))
-                mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
-                mb['seq_lens'] = Variable(th.cat(mb['seq_lens'], 0))
-                if model.use_features:
-                    mb['features'] = Variable(th.stack(mb['features'], 0))
+            # # Fake data
+            # for fb in tqdm(fakes_loader, desc='Epoch %d' % e):
+            #
+            #     fb['words'] = Variable(th.stack(fb['words'], 0))
+            #     fb['lens'] = Variable(th.cat(fb['lens'], 0))
+            #     fb['disease_ids'] = Variable(th.stack(fb['disease_ids'], 0))
+            #     fb['seq_lens'] = Variable(th.cat(fb['seq_lens'], 0))
+            #     if model.use_features:
+            #         fb['features'] = Variable(th.stack(fb['features'], 0))
+            #     # Coherence step
+            #     optimizer.zero_grad()
+            #     # Pass through the model
+            #     scores = model(fb, use_coherence)
+            #     # Get sequence length and number of negatives
+            #     nneg = scores.size()[2]
+            #     # Get the loss
+            #     loss = loss_fn(scores.view(-1, nneg))
+            #     loss.backward(retain_graph=True)
+            #     optimizer.step()
+            #
+            #     step += 1
 
-                # Mention step
-                optimizer.zero_grad()
-                # Pass through the model
-                mention_scores = model(mb, False)
-                # Get sequence length and number of negatives
-                nneg = mention_scores.size()[2]
-                scores = mention_scores
-                # Get the loss
-                loss = loss_fn(scores.view(-1, nneg))
-                loss.backward(retain_graph=True)
-                optimizer.step()
-
-                step += 1
-            # Fake data
-            for fb in tqdm(fakes_loader, desc='Epoch %d' % e):
-
-                fb['words'] = Variable(th.stack(fb['words'], 0))
-                fb['lens'] = Variable(th.cat(fb['lens'], 0))
-                fb['disease_ids'] = Variable(th.stack(fb['disease_ids'], 0))
-                fb['seq_lens'] = Variable(th.cat(fb['seq_lens'], 0))
-                if model.use_features:
-                    fb['features'] = Variable(th.stack(fb['features'], 0))
-                # Coherence step
-                optimizer.zero_grad()
-                # Pass through the model
-                scores = model(fb, use_coherence)
-                # Get sequence length and number of negatives
-                nneg = scores.size()[2]
-                # Get the loss
-                loss = loss_fn(scores.view(-1, nneg))
-                loss.backward(retain_graph=True)
-                optimizer.step()
-
-                step += 1
-            # Distantly supervised data
-            for mb in tqdm(distant_loader, desc='Epoch %d' % e):
-                mb['words'] = Variable(th.stack(mb['words'], 0))
-                mb['lens'] = Variable(th.cat(mb['lens'], 0))
-                mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
-                mb['seq_lens'] = Variable(th.cat(mb['seq_lens'], 0))
-                if model.use_features:
-                    mb['features'] = Variable(th.stack(mb['features'], 0))
-
-                # Mention step
-                optimizer.zero_grad()
-                # Pass through the model
-                mention_scores = model(mb, use_coherence)
-                # Get sequence length and number of negatives
-                nneg = mention_scores.size()[2]
-                scores = mention_scores
-                # Get the loss
-                loss = loss_fn(scores.view(-1, nneg))
-                loss.backward(retain_graph=True)
-                optimizer.step()
-
-                step += 1
             # Coherence data
-            for cb in tqdm(coherence_loader, desc='Epoch %d' % e):
+            for cb in tqdm(coherence_train_loader, desc='Epoch %d' % e):
 
                 cb['words'] = Variable(th.stack(cb['words'], 0))
                 cb['lens'] = Variable(th.cat(cb['lens'], 0))
@@ -304,6 +259,162 @@ class NormCoTrainer:
         if logfile:
             with open(logfile, 'a') as f:
                 f.write("Best accuracy: %f in epoch %d\n" % (acc_best[1], acc_best[0]))
+
+
+    #
+    # def _train(self,model, optimizer, loss_fn,mention_loader_train, coherence_loader_train,mention_loader_valid,
+    #           log_dir='./tb', n_epochs=100, save_every=1, save_file_name='model.pth', eval_data=None, eval_every=10,
+    #           logfile=None, use_coherence=True):
+    #     '''
+    #     Main training loop
+    #     '''
+    #
+    #     # Set mode to training
+    #     model.train()
+    #     step = 0
+    #
+    #     # Keep track of best results for far
+    #     acc_best = (-1, 0.0)
+    #     patience = 15
+    #     # Training loop
+    #     for e in range(n_epochs):
+    #         # Evaluate
+    #         if eval_every > 0 and (e + 1) % eval_every == 0:
+    #             model.eval()
+    #             f = None
+    #             if logfile:
+    #                 f = open(logfile, 'a')
+    #                 f.write("Epoch %d\n" % e)
+    #             acc = eval(model, **eval_data, logfile=f)
+    #             if logfile:
+    #                 f.write('\n')
+    #                 f.close()
+    #             if acc >= acc_best[1]:
+    #                 acc_best = (e, acc)
+    #                 th.save(model.state_dict(), save_file_name + "_bestacc_%05d" % (e))
+    #             elif e - acc_best[0] > patience:
+    #                 # Early stopping
+    #                 break
+    #
+    #             model.train()
+    #             gc.collect()
+    #
+    #         # Epoch loops
+    #         # Dictionary data
+    #         for mb in tqdm(dict_loader, desc='Epoch %d' % e):
+    #             mb['words'] = Variable(th.stack(mb['words'], 0))
+    #             mb['lens'] = Variable(th.cat(mb['lens'], 0))
+    #             mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
+    #             mb['seq_lens'] = Variable(th.cat(mb['seq_lens'], 0))
+    #             if model.use_features:
+    #                 mb['features'] = Variable(th.stack(mb['features'], 0))
+    #
+    #             # Mention step
+    #             optimizer.zero_grad()
+    #             # Pass through the model
+    #             mention_scores = model(mb, False)
+    #             # Get sequence length and number of negatives
+    #             nneg = mention_scores.size()[2]
+    #             scores = mention_scores
+    #             # Get the loss
+    #             loss = loss_fn(scores.view(-1, nneg))
+    #             loss.backward(retain_graph=True)
+    #             optimizer.step()
+    #
+    #             step += 1
+    #         # Mention data
+    #         for mb in tqdm(mention_loader, desc='Epoch %d' % e):
+    #             mb['words'] = Variable(th.stack(mb['words'], 0))
+    #             mb['lens'] = Variable(th.cat(mb['lens'], 0))
+    #             mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
+    #             mb['seq_lens'] = Variable(th.cat(mb['seq_lens'], 0))
+    #             if model.use_features:
+    #                 mb['features'] = Variable(th.stack(mb['features'], 0))
+    #
+    #             # Mention step
+    #             optimizer.zero_grad()
+    #             # Pass through the model
+    #             mention_scores = model(mb, False)
+    #             # Get sequence length and number of negatives
+    #             nneg = mention_scores.size()[2]
+    #             scores = mention_scores
+    #             # Get the loss
+    #             loss = loss_fn(scores.view(-1, nneg))
+    #             loss.backward(retain_graph=True)
+    #             optimizer.step()
+    #
+    #             step += 1
+    #         # Fake data
+    #         for fb in tqdm(fakes_loader, desc='Epoch %d' % e):
+    #
+    #             fb['words'] = Variable(th.stack(fb['words'], 0))
+    #             fb['lens'] = Variable(th.cat(fb['lens'], 0))
+    #             fb['disease_ids'] = Variable(th.stack(fb['disease_ids'], 0))
+    #             fb['seq_lens'] = Variable(th.cat(fb['seq_lens'], 0))
+    #             if model.use_features:
+    #                 fb['features'] = Variable(th.stack(fb['features'], 0))
+    #             # Coherence step
+    #             optimizer.zero_grad()
+    #             # Pass through the model
+    #             scores = model(fb, use_coherence)
+    #             # Get sequence length and number of negatives
+    #             nneg = scores.size()[2]
+    #             # Get the loss
+    #             loss = loss_fn(scores.view(-1, nneg))
+    #             loss.backward(retain_graph=True)
+    #             optimizer.step()
+    #
+    #             step += 1
+    #         # Distantly supervised data
+    #         for mb in tqdm(distant_loader, desc='Epoch %d' % e):
+    #             mb['words'] = Variable(th.stack(mb['words'], 0))
+    #             mb['lens'] = Variable(th.cat(mb['lens'], 0))
+    #             mb['disease_ids'] = Variable(th.stack(mb['disease_ids'], 0))
+    #             mb['seq_lens'] = Variable(th.cat(mb['seq_lens'], 0))
+    #             if model.use_features:
+    #                 mb['features'] = Variable(th.stack(mb['features'], 0))
+    #
+    #             # Mention step
+    #             optimizer.zero_grad()
+    #             # Pass through the model
+    #             mention_scores = model(mb, use_coherence)
+    #             # Get sequence length and number of negatives
+    #             nneg = mention_scores.size()[2]
+    #             scores = mention_scores
+    #             # Get the loss
+    #             loss = loss_fn(scores.view(-1, nneg))
+    #             loss.backward(retain_graph=True)
+    #             optimizer.step()
+    #
+    #             step += 1
+    #         # Coherence data
+    #         for cb in tqdm(coherence_loader, desc='Epoch %d' % e):
+    #
+    #             cb['words'] = Variable(th.stack(cb['words'], 0))
+    #             cb['lens'] = Variable(th.cat(cb['lens'], 0))
+    #             cb['disease_ids'] = Variable(th.stack(cb['disease_ids'], 0))
+    #             cb['seq_lens'] = Variable(th.cat(cb['seq_lens'], 0))
+    #             if model.use_features:
+    #                 cb['features'] = Variable(th.stack(cb['features'], 0))
+    #             # Coherence step
+    #             optimizer.zero_grad()
+    #             # Pass through the model
+    #             scores = model(cb, use_coherence)
+    #             # Get sequence length and number of negatives
+    #             nneg = scores.size()[2]
+    #             # Get the loss
+    #             loss = loss_fn(scores.view(-1, nneg))
+    #             loss.backward(retain_graph=True)
+    #             optimizer.step()
+    #
+    #             step += 1
+    #
+    #         gc.collect()
+    #
+    #     # Log final best values
+    #     if logfile:
+    #         with open(logfile, 'a') as f:
+    #             f.write("Best accuracy: %f in epoch %d\n" % (acc_best[1], acc_best[0]))
 
 
 if __name__ == "__main__":

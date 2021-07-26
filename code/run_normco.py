@@ -77,11 +77,39 @@ if __name__ == '__main__':
 
             for fold,data_fold in enumerate(datasets_folds):
                 mentions_train,concepts_train,mentions_test,concepts_test = data_fold
-                data = prepare_data(data_fold)
+                data_generator = DataGenerator(args)
+                #def prepare_data(self,paired_data,tree,concept2id,max_depth,max_nodes,search_method):
+                data_dicts,vocab = data_generator.prepare_data(
+                )
+                # import dataset from def __init__(self, concept_dict,data_dict, num_neg, vocab_dict=None, use_features=False):
+
+                mention_data_train = PreprocessedDataset(concept2id,data_dicts['train']['mentions'],num_neg,vocab,False)
+                coherence_data_train = PreprocessedDataset(concept2id, data_dicts['train']['hierarchy'], num_neg, vocab,
+                                                           False)
+                mention_data_valid = PreprocessedDataset(concept2id,data_dicts['valid']['mentions'],num_neg,vocab,False)
+                coherence_data_valid = PreprocessedDataset(concept2id, data_dicts['valid']['hierarchy'], num_neg, vocab,
+                                                           False)
+                mention_data_test = PreprocessedDataset(concept2id,data_dicts['test']['mentions'],num_neg,vocab,False)
+                coherence_data_test = PreprocessedDataset(concept2id, data_dicts['test']['hierarchy'], num_neg, vocab,
+                                                           False)
+                mention_train_loader = DataLoader(
+                mention_data_train,
+                batch_size=args.batch_size,
+                shuffle=True,
+                num_workers=args.threads,
+                collate_fn=mention_data.collate
+            )
+                coherence_train_loader = DataLoader(
+                    mention_data_train,
+                    batch_size=args.batch_size,
+                    shuffle=True,
+                    num_workers=args.threads,
+                    collate_fn=mention_data.collate
+                )
+
+
                 trainer = NormCoTrainer(args)
-
-
-
+                trainer.train(mention_train_loader,coherence_train_loader,mention_data_valid,coherence_data_valid)
                 accu1,accu5 = classifier.eval(mentions_test,concepts_test)
                 print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
                 break

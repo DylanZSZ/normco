@@ -18,6 +18,8 @@ from utils.text_processing import load_dict_from_vocab_file
 from utils.text_processing import tokens_to_ids
 from entity_normalization.model.prepare_batch import load_text_batch
 from torch.nn import embeddings
+import networkx as nx
+from networkx import Graph,DiGraph
 stop_words = set(stopwords.words('english'))
 
 def getMentions(file, pmid_list=None):
@@ -285,19 +287,56 @@ def getDictData(dict_rows, use_context=False, row_filter=None):
     return dict_data
 
 
+'''
+concept2id dict --> to replace concept to disease
+
+
+
+'''
+
+class HierarchyGraph:
+    def __init__(self,relations):
+        self.graph = self._build_graph(relations)
+    def _build_graph(self,relations):
+        graph = nx.Graph()
+        for pair in relations:
+            graph.add_edge(*pair)
+        return graph
+    def get_neighbor_idx(self,target,max_depth=3,max_nodes=10,search_method='bfs'):
+        ls_neighbors = []
+        if search_method=='bfs':
+            # get the end node for each edge
+            ls_neighbors = [i[1] for i in nx.bfs_edges(self.graph,target,max_depth)]
+            #prune the list of neighbors
+            ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
+        elif search_method=='dfs':
+            # get the end node for each edge
+            ls_neighbors = [i[1] for i in nx.dfs_edges(self.graph,target,max_depth)]
+            #prune the list of neighbors
+            ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
+        return ls_neighbors
+
+
+
+
+
+
+
+
+
 class DataGenerator:
     def __init__(self,args):
         self.args = args
-
     # def createVocabAndEmbeddings(self,concept_dict, vocabFileName, embeddingInitFileName, conceptInitFileName,
     #                              pretrained_embeddings, use_unk_concept=True):
-    def createVocabAndEmbeddings(self, concept_dict,
+    def create_vocab(self, concept_dict,
                                  concepts,
                                  mentions,
                                  vocabFileName, embeddingInitFileName, conceptInitFileName,
                                      pretrained_embeddings, use_unk_concept=True):
         print("CREATING VOCABULARY...\n")
         vocab = set()
+
         for mention in mentions:
             mention = " ".join([t for t in word_tokenize(mention) if t not in stop_words])
             tokens = set(word_tokenize(clean_text(mention, removePunct=True, lower=False)))
@@ -329,68 +368,194 @@ class DataGenerator:
         for n in network:
             if len(network[n]) > 1:
                 duplicates[n] = network[n]
-        wv = KeyedVectors.load_word2vec_format(pretrained_embeddings, binary=True)
-        mean = np.mean(wv.syn0)
-        var = np.var(wv.syn0)
+        # wv = KeyedVectors.load_word2vec_format(pretrained_embeddings, binary=True)
+        # mean = np.mean(wv.syn0)
+        # var = np.var(wv.syn0)
         # vocab = set()
         for d in duplicates:
             vocab = vocab - network[d]
-            found = None
-            for candidate in list(network[d]):
-                if candidate in wv:
-                    if found is None:
-                        found = (candidate, wv.vocab[candidate].count)
-                    elif wv.vocab[candidate].count > found[1]:
-                        found = (candidate, wv.vocab[candidate].count)
-            if found is None:
-                # just use lowercase version
-                vocab.add(d)
-            else:
-                vocab.add(found[0])
+            # just use lowercase version
+            vocab.add(d)
+        vocab = set([k.lower() for k in vocab])
+        vocab.update({'<pad>','<unk>'})
+        vocab = sorted(vocab)
+        # with open(vocabFileName, 'w', encoding='utf-8') as f:
+        #     f.write('<pad>\n')
+        #     f.write('<unk>\n')
+        #     for k in sorted(vocab):
+        #         # for k in final_vocab:
+        #         f.write(k.lower() + '\n')
+        '''
+        The following code was originally used to find duplicates and match case with the dictionary in the
+        pretrained embeddings which we may not need. 
+        '''
+        # for d in duplicates:
+        #     vocab = vocab - network[d]
+        #     found = None
+        #     for candidate in list(network[d]):
+        #         if candidate in wv:
+        #             if found is None:
+        #                 found = (candidate, wv.vocab[candidate].count)
+        #             elif wv.vocab[candidate].count > found[1]:
+        #                 found = (candidate, wv.vocab[candidate].count)
+        #     if found is None:
+        #         # just use lowercase version
+        #         vocab.add(d)
+        #     else:
+        #         vocab.add(found[0])
 
-        print("CREATING INITIAL WORD EMBEDDINGS...\n")
-        embeddings = []
-        final_vocab = []
-        # For pad and unknown
-        embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
-        embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
-        count = 0
-        for v in sorted(vocab):
-            if v not in wv:
-                count += 1
-                embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
-            else:
-                embeddings.append(wv[v])
+        # if self.args.init_embedding:
+        #     print("CREATING INITIAL WORD EMBEDDINGS...\n")
+        #     embeddings = []
+        #     final_vocab = []
+        #     # For pad and unknown
+        #     embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #     embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #     count = 0
+        #     for v in sorted(vocab):
+        #         if v not in wv:
+        #             count += 1
+        #             embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #         else:
+        #             embeddings.append(wv[v])
+        #
+        #     embeddings = np.asarray(embeddings)
+        #     np.save(embeddingInitFileName, embeddings)
+        #     print("CREATING INITIAL CONCEPT EMBEDDINGS...\n")
+        #     vocab_dict = load_dict_from_vocab_file(vocabFileName)
+        #     if use_unk_concept:
+        #         # First is UNK
+        #         concept_init = [np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,))]
+        #         rows = concept_dict.values[1:]
+        #     else:
+        #         concept_init = []
+        #         rows = concept_dict.values
+        #
+        #     for row in rows:
+        #         nostops = " ".join([t for t in word_tokenize(row[0]) if t not in stop_words])
+        #         toks = word_tokenize(clean_text(nostops, removePunct=True))
+        #         ids = tokens_to_ids(toks, vocab_dict)
+        #         concept_init.append(np.sum([embeddings[i] for i in ids], axis=0))
+        #
+        #     concept_init = np.asarray(concept_init)
+        #     np.save(conceptInitFileName, concept_init)
+        return vocab
+    def read_vocab(self,vocab_dir):
+        return load_dict_from_vocab_file(vocab_dir)
+    #original input for examples:  a list whose elements are [v[1],v[0]]
+    # example is of format [mention,related-ids]
+    def load_text_batch(self,examples, vocab, maxlen=20, precleaned=False):
+        words = []
+        lens = []
+        ids = []
 
-        embeddings = np.asarray(embeddings)
-        np.save(embeddingInitFileName, embeddings)
+        for ex in examples:
+            w_curr = []
 
-        with open(vocabFileName, 'w', encoding='utf-8') as f:
-            f.write('<pad>\n')
-            f.write('<unk>\n')
-            for k in sorted(vocab):
-                # for k in final_vocab:
-                f.write(k.lower() + '\n')
+            words_curr, word_len = text_to_batch(ex[0],
+                                                 vocab,
+                                                 maxlen=maxlen,
+                                                 precleaned=precleaned)
+            lens.append(word_len)
+            words.append(np.asarray(words_curr))
+            ids.append(np.asarray(ex[1:]))
+        seq_len = len(words)
+        return np.asarray(words), np.asarray(lens), np.asarray(ids), seq_len
 
-        print("CREATING INITIAL CONCEPT EMBEDDINGS...\n")
-        vocab_dict = load_dict_from_vocab_file(vocabFileName)
-        if use_unk_concept:
-            # First is UNK
-            concept_init = [np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,))]
-            rows = concept_dict.values[1:]
-        else:
-            concept_init = []
-            rows = concept_dict.values
+    def save_data(self,dir,words,lens,ids,seqlens):
+        np.savez(dir, words=np.expand_dims(words, 1),
+                 lens=np.expand_dims(lens, 1),
+                 ids=np.expand_dims(ids, 1), seq_lens=np.expand_dims(seqlens, 1))
 
-        for row in rows:
-            nostops = " ".join([t for t in word_tokenize(row[0]) if t not in stop_words])
-            toks = word_tokenize(clean_text(nostops, removePunct=True))
-            ids = tokens_to_ids(toks, vocab_dict)
-            concept_init.append(np.sum([embeddings[i] for i in ids], axis=0))
+    def build_graph(self,tree):
+        concept_graph = HierarchyGraph(tree)
+        return concept_graph
 
-        concept_init = np.asarray(concept_init)
-        np.save(conceptInitFileName, concept_init)
-    def generate_data(self,concepts,mentions):
+    def get_related_concept_ls(self,concept_graph,concept2id,pairs,max_depth,max_nodes,search_method):
+        res = {}
+        for pair in pairs:
+            # pair is of format (mention,concept)
+            mention = pair[0]
+            concept = pair[1]
+            id = concept2id[concept]
+            context = concept_graph.get_neighbor_idx(id,max_depth,max_nodes,search_method)
+            res[mention]=context
+        return res
+
+    def
+
+
+    def gen_data_dict(self,concepts,mentions,coherence_data,vocab,concept2id):
+        data_dicts = {}
+        for k in concept.keys():
+            concept_ls = concepts[k]
+            mention_ls = mentions[k]
+            #mentions
+            mwords, mlens, mids, mseqlens = load_text_batch([ [mention_ls[i],[concept2id[concept_ls[i]]]] for i in range(len(concept_ls))],vocab,20)
+            #hierarchy data
+            hwords, hlens, hids, hseqlens = load_text_batch([[mention,coherence_data[mention]] for mention in mention_ls], vocab,20)
+
+            m_dict = {
+                "words":np.expand_dims(mwords,1),
+                "lens":np.expand_dims(mlens,1),
+                "ids":np.expand_dims(mids,1),
+                'seq_lens':np.expand_dims(mseqlens,1)
+
+            }
+            h_dict = {
+                "words": np.expand_dims(hwords, 1),
+                "lens": np.expand_dims(hlens, 1),
+                "ids": np.expand_dims(hids, 1),
+                'seq_lens': np.expand_dims(hseqlens, 1)
+
+                    }
+            data_dicts[k] = {'mentions':m_dict,'hierarchy':h_dict}
+        return data_dicts
+
+        # mwords, mlens, mids, mseqlens = load_text_batch([[v[1], v[0]] for v in data], vocab, id_dict, 20)
+        # m_usefeatures = np.asarray([r[2] != ' ' for r in dictdb])
+        # mseqlens = np.asarray([[1] for i in range(mseqlens)])
+        # np.savez(args.trainset_dictionary_preprocessed_file, words=np.expand_dims(mwords, 1),
+        #          lens=np.expand_dims(mlens, 1),
+        #          ids=np.expand_dims(mids, 1), seq_lens=np.expand_dims(mseqlens, 1))
+    #concepts and mentions:
+    # dicts {'train':list,'valid':list,'test':list}
+    def prepare_data(self,concepts,mentions,paired_data,tree,concept2id,max_depth,max_nodes,search_method):
+        '''
+        main method for data generation
+        workflow:
+        construct dictionary (map between concept and id)
+        generate vocabulary
+        gen mentions data
+        gen dictionary data
+        gen coherence data
+        '''
+        #concept2id used as dict
+
+        #first generate vocabulary
+        ls_concepts = []
+        ls_mentions = []
+        for i in concepts.keys():
+            ls_concepts = ls_concepts+concepts[i]
+            ls_mentions = ls_mentions + mentions[i]
+        vocab = self.create_vocab(concept2id,ls_concepts,ls_mentions,self.args.vocabFileName,None,None,None,True)
+        concept_graph = self.build_graph(tree)
+
+        related_concepts = self.get_related_concept_ls(concept_graph,concept2id,paired_data,max_depth,max_nodes,search_methd)
+        data_dicts = self.gen_data_dict(concepts,mentions,related_concepts,vocab,concept2id)
+        return data_dicts,vocab
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -423,6 +588,8 @@ if __name__ == "__main__":
     parser.add_argument('--tagger_data_file', type=str, help='Output file for tagger generated data', required=True)
     parser.add_argument('--tagger_labels_file', type=str, help='Input file containing labels used by TaggerOne', required=True)
     parser.add_argument('--tagger_labels_output', type=str, help='Output file for labels used by TaggerOne', required=True)
+    parser.add_argument('--init_embedding', type=bool,default=False, help='if need initial embeddings',
+                        required=True)
     
     args = parser.parse_args()
     
@@ -473,7 +640,7 @@ if __name__ == "__main__":
     mwords,mlens,mids,mseqlens = load_text_batch([[v[1], v[0]] for v in mentiondb], vocab, id_dict, 20)
     m_usefeatures = np.asarray([r[2] != ' ' for r in mentiondb])
     mseqlens = np.asarray([[1] for i in range(mseqlens)])
-    np.savez(args.trainset_mentions_preprocessed_file, words=np.expand_dims(mwords, 1), lens=np.expand_dims(mlens, 1), 
+    np.savez(args.trainset_mentions_preprocessed_file, words=np.expand_dims(mwords, 1), lens=np.expand_dims(mlens, 1),
                                                                      ids=np.expand_dims(mids, 1), seq_lens=np.expand_dims(mseqlens, 1))
     
     #Dictionary expansion
