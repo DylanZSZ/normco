@@ -1,6 +1,6 @@
 import numpy as np
-from entity_normalization.model.reader_utils import text_to_batch
-from utils.text_processing import tokens_to_ids
+from .reader_utils import text_to_batch
+from ..utils.text_processing import tokens_to_ids
 
 def load_text_batch(examples, vocab, id_dict, maxlen=20, precleaned=False):
     words = []

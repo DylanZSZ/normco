@@ -1,12 +1,12 @@
 import numpy as np
 import collections
 from nltk.corpus import stopwords
-from utils.text_processing import word_tokenize
-from utils.text_processing import sent_tokenize
-from utils.text_processing import stem_and_lemmatize
-from utils.text_processing import clean_text
-from utils.text_processing import tokens_to_ids
-from utils.text_processing import normalize_sentence_length
+from ..utils.text_processing import word_tokenize
+from ..utils.text_processing import sent_tokenize
+from ..utils.text_processing import stem_and_lemmatize
+from ..utils.text_processing import clean_text
+from ..utils.text_processing import tokens_to_ids
+from ..utils.text_processing import normalize_sentence_length
 
 stop_words = set(stopwords.words('english'))
 

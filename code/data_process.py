@@ -1,6 +1,6 @@
 
 import json
-import wget
+# import wget
 import os
 import scipy
 import  tqdm

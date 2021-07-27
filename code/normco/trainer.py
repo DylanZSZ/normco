@@ -8,69 +8,21 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import nltk
+# import model.scoring as scoring
+# import model.phrase_model as m
 
-import entity_normalization.model.scoring as scoring
-import entity_normalization.model.phrase_model as m
-from eval import load_eval_data
-from eval import dataToTorch
-from eval import accuracy as eval
-from utils import text_processing
+from .model.scoring import *
+from .model.phrase_model import *
+from .eval import load_eval_data
+from .eval import dataToTorch
+from .eval import accuracy as eval
+from .utils.text_processing import *
 
 th.manual_seed(7)
 np.random.seed(7)
 
 class NormCoTrainer:
-    # @staticmethod
-    # def add_args(parser):
-    #     parser.add_argument('--model', type=str, help='The RNN type for coherence',
-    #                         default='GRU', choices=['LSTM', 'GRU'])
-    #     parser.add_argument('--vocab_file', type=str, help='The location of the vocabulary file', required=True)
-    #     parser.add_argument('--embeddings_file', type=str, help='The location of the pretrained embeddings',
-    #                         required=True)
-    #     parser.add_argument('--disease_embeddings_file', type=str, help='The location of pretrained disease embeddings',
-    #                         default=None)
-    #     parser.add_argument('--train_data', type=str, help='The location of the training data', default=None)
-    #     parser.add_argument('--dictionary_data', type=str, help='The location of the dictionary mentions', default=None)
-    #     parser.add_argument('--distant_data', type=str, help='The location of the distantly supervised data',
-    #                         default=None)
-    #     parser.add_argument('--coherence_data', type=str, help='The location of the coherence data', required=True)
-    #     parser.add_argument('--fake_data', type=str, help='The location of synthetic data to train the coherence model',
-    #                         default=None)
-    #     parser.add_argument('--num_epochs', type=int, help='The number of epochs to run', default=10)
-    #     parser.add_argument('--batch_size', type=int, help='Batch size for mini batching', default=32)
-    #     parser.add_argument('--sequence_len', type=int, help='The sequence length for phrases', default=20)
-    #     parser.add_argument('--num_neg', type=int, help='The number of negative examples', default=1)
-    #     parser.add_argument('--output_dim', type=int, help='The output dimensionality', default=200)
-    #     parser.add_argument('--lr', type=float, help='The starting learning rate', default=0.001)
-    #     parser.add_argument('--l2reg', type=float, help='L2 weight decay', default=0.0)
-    #     parser.add_argument('--dropout_prob', type=float, help='Dropout probability', default=0.0)
-    #     parser.add_argument('--scoring_type', type=str, help='The type of scoring function to use', default="euclidean",
-    #                         choices=['euclidean', 'bilinear', 'cosine'])
-    #     parser.add_argument('--weight_init', type=str, help='Weights file to initialize the model', default=None)
-    #     parser.add_argument('--threads', type=int, help='Number of parallel threads to run', default=1)
-    #     parser.add_argument('--save_every', type=int, help='Number of epochs between each model save', default=1)
-    #     parser.add_argument('--save_file_name', type=str, help='Name of file to save model to', default='model.pth')
-    #     parser.add_argument('--optimizer', type=str, help='Which optimizer to use', default='sgd',
-    #                         choices=['sgd', 'rmsprop', 'adagrad', 'adadelta', 'adam'])
-    #     parser.add_argument('--loss', type=str, help='Which loss function to use', default='maxmargin',
-    #                         choices=['maxmargin', 'xent'])
-    #     parser.add_argument('--eval_every', type=int, help='Number of epochs between each evaluation', default=0)
-    #     parser.add_argument('--disease_dict', type=str, help='The location of the disease dictionary', default=None)
-    #     parser.add_argument('--labels_file', type=str, help='Labels file for inline evaluation', default=None)
-    #     parser.add_argument('--banner_tags', type=str, help='Banner tagged documents for inline evaluation',
-    #                         default=None)
-    #     parser.add_argument('--test_features_file', type=str,
-    #                         help='File containing test features when features are used',
-    #                         default=None)
-    #     parser.add_argument('--use_features', action='store_true', help='Whether or not to use hand crafted features',
-    #                         default=False)
-    #     parser.add_argument('--mention_only', action='store_true', help='Whether or not to use mentions only',
-    #                         default=False)
-    #     parser.add_argument('--logfile', type=str, help='File to log evaluation in', default=None)
-    #
-    #     args = parser.parse_args()
-    #     print(args)
-
     def __init__(self,args):
         self.args = args
         self.model,self.optimizer,self.loss = self._build_model(args)
@@ -108,7 +60,7 @@ class NormCoTrainer:
         embeddings_init = np.load(args.embeddings_file)
 
         # Create the normalization model
-        model = m.NormalizationModel(len(coherence_data.id_dict.keys()),
+        model = NormalizationModel(len(coherence_data.id_dict.keys()),
                                      disease_embeddings_init=disease_embs_init,
                                      phrase_embeddings_init=embeddings_init,
                                      distfn=distance_fn,
@@ -140,9 +92,9 @@ class NormCoTrainer:
 
         # Pick the loss function
         if args.loss in 'maxmargin':
-            loss = scoring.MaxMarginLoss(margin=margin)
+            loss = MaxMarginLoss(margin=margin)
         elif args.loss in 'xent':
-            loss = scoring.CrossEntropyDistanceLoss()
+            loss = CrossEntropyDistanceLoss()
 
         # Load pretrained weights if given
         if args.weight_init:
@@ -417,89 +369,4 @@ class NormCoTrainer:
     #             f.write("Best accuracy: %f in epoch %d\n" % (acc_best[1], acc_best[0]))
 
 
-if __name__ == "__main__":
-    ################################################
-    # Parse command line arguments
-    ################################################
-
-    vocab_dict = text_processing.load_dict_from_vocab_file(args.vocab_file)
-    # First set up the dataset
-    if args.train_data is not None:
-        mention_data = m.PreprocessedDataset(args.disease_dict, args.train_data, args.num_neg, vocab_dict,
-                                             args.use_features)
-        mention_loader = DataLoader(
-            mention_data,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.threads,
-            collate_fn=mention_data.collate
-        )
-    else:
-        mention_loader = []
-    if args.dictionary_data is not None:
-        dictionary_data = m.PreprocessedDataset(args.disease_dict, args.dictionary_data, args.num_neg, vocab_dict,
-                                                args.use_features)
-        dict_loader = DataLoader(
-            dictionary_data,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.threads,
-            collate_fn=mention_data.collate
-        )
-    else:
-        dict_loader = []
-    if args.distant_data is not None:
-        distant_data = m.PreprocessedDataset(args.disease_dict, args.distant_data, args.num_neg, vocab_dict,
-                                             args.use_features)
-        distant_loader = DataLoader(
-            distant_data,
-            batch_size=1,
-            shuffle=True,
-            num_workers=args.threads,
-            collate_fn=mention_data.collate
-        )
-    else:
-        distant_loader = []
-    if args.fake_data is not None:
-        fake_data = m.PreprocessedFakesDataset(args.disease_dict, args.fake_data, args.num_neg, vocab_dict,
-                                               args.use_features)
-        fakes_loader = DataLoader(
-            fake_data,
-            batch_size=1,
-            shuffle=True,
-            num_workers=args.threads,
-            collate_fn=mention_data.collate
-        )
-    else:
-        fakes_loader = []
-
-    coherence_data = m.PreprocessedDataset(args.disease_dict, args.coherence_data, args.num_neg, vocab_dict,
-                                           args.use_features)
-    coherence_loader = DataLoader(
-        coherence_data,
-        batch_size=1,
-        shuffle=True,
-        num_workers=args.threads,
-        collate_fn=coherence_data.collate
-    )
-
-    # Set up the evaluation dataset for inline evaluation
-    eval_data = None
-    if args.eval_every > 0:
-        print("Loading evaluation data...")
-        eval_data = load_eval_data(args.disease_dict, args.labels_file, vocab_dict,
-                                   args.banner_tags, args.sequence_len,
-                                   features_file=args.test_features_file)
-        id_dict = {i: k for i, k in enumerate(eval_data['disease_data'].values[:, 1])}
-        with open(args.labels_file) as f:
-            next(f)
-            testdata = [l.strip().split('\t') for l in f]
-        acc_data = dataToTorch(testdata, vocab_dict, maxlen=args.sequence_len)
-        acc_data['disease_ids'] = eval_data['test']['disease_ids']
-        acc_data['features'] = eval_data['test']['features']
-        eval_data = dict(torch_testdata=acc_data, labs=eval_data['labs'], id_dict=id_dict, testdata=testdata,
-                         disease_dict=eval_data['disease_data'], error_file=None)
-        print("Done!")
-
-    # Train!
 

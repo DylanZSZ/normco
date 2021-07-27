@@ -3,9 +3,9 @@ import random
 import os
 import argparse
 from data_process import construct_graph,data_split
-
-from model import EditDistance_Classifier
-
+from normco.trainer import NormCoTrainer
+# from edit_distance import EditDistance_Classifier
+from normco.data.data_generator import DataGenerator
 #set up seed         
 def setup_seed(seed):
     random.seed(seed)
@@ -14,20 +14,21 @@ def setup_seed(seed):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    # data processing arguments
+    parser = argparse.ArgumentParser(description="Generate data and datasets for training and evaluation")
+
+    parser.add_argument('--use_unk_concept', action='store_true',
+                        help='Whether or not to use a special concept for "UNKNOWN"', default=False)
+
+    parser.add_argument('--init_embedding', type=bool, default=False, help='if need initial embeddings')
+
+
+    #,max_depth,max_nodes,search_method
+    parser.add_argument('--max-depth',type=int,default=3,help='number of maximum')
+
+    # training arguments
     parser.add_argument('--model', type=str, help='The RNN type for coherence',
                             default='GRU', choices=['LSTM', 'GRU'])
-    parser.add_argument('--vocab_file', type=str, help='The location of the vocabulary file', required=True)
-    parser.add_argument('--embeddings_file', type=str, help='The location of the pretrained embeddings',
-                            required=True)
-    parser.add_argument('--disease_embeddings_file', type=str, help='The location of pretrained disease embeddings',
-                            default=None)
-    parser.add_argument('--train_data', type=str, help='The location of the training data', default=None)
-    parser.add_argument('--dictionary_data', type=str, help='The location of the dictionary mentions', default=None)
-    parser.add_argument('--distant_data', type=str, help='The location of the distantly supervised data',
-                            default=None)
-    parser.add_argument('--coherence_data', type=str, help='The location of the coherence data', required=True)
-    parser.add_argument('--fake_data', type=str, help='The location of synthetic data to train the coherence model',
-                            default=None)
     parser.add_argument('--num_epochs', type=int, help='The number of epochs to run', default=10)
     parser.add_argument('--batch_size', type=int, help='Batch size for mini batching', default=32)
     parser.add_argument('--sequence_len', type=int, help='The sequence length for phrases', default=20)
@@ -61,26 +62,35 @@ if __name__ == '__main__':
     parser.add_argument('--logfile', type=str, help='File to log evaluation in', default=None)
 
     args = parser.parse_args()
-
     setup_seed(0)
     dir = '../data/datasets'
-    f=True
-    for dir,_,files in os.walk(dir):
-        f=False
-        for filename in files[:1]:
+    print(dir)
+    for d,_,files in os.walk(dir):
+        print(files)
+        for filename in files:
+            print(filename)
             #if filename=='envo.obo':continue# envo.obo has a specific problem and I am not sure why.
             concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph(os.path.join(dir,filename))
             print(filename,'number of synonym pairs',len(synonym_pairs))
             if len(synonym_pairs)<10 or len(synonym_pairs)>10000:continue#modify the two number to control how many datasets will be tested.
             datasets_folds =  data_split(concept_list=concept_list,synonym_pairs=synonym_pairs,is_unseen=True,test_size=0.33)
-
-
             for fold,data_fold in enumerate(datasets_folds):
                 mentions_train,concepts_train,mentions_test,concepts_test = data_fold
                 data_generator = DataGenerator(args)
                 #def prepare_data(self,paired_data,tree,concept2id,max_depth,max_nodes,search_method):
-                data_dicts,vocab = data_generator.prepare_data(
-                )
+                mentions = {
+                    'train':mentions_train,
+                    'valid':mentions_test,
+                    'test':mentions_test
+
+                }
+                concepts = {
+                    'train': concepts_train,
+                    'valid': concepts_test,
+                    'test': concepts_test
+
+                }
+                data_dicts,vocab = data_generator.prepare_data(concepts,mentions,edges,synonym_pairs,concept2id)
                 # import dataset from def __init__(self, concept_dict,data_dict, num_neg, vocab_dict=None, use_features=False):
 
                 mention_data_train = PreprocessedDataset(concept2id,data_dicts['train']['mentions'],num_neg,vocab,False)

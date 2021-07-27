@@ -14,10 +14,10 @@ from itertools import groupby
 from nltk.metrics.distance import edit_distance
 from sklearn.metrics import average_precision_score
 
-from entity_normalization.model.reader_utils import text_to_batch
-from entity_normalization.model.prepare_batch import load_text_batch
-from utils import text_processing
-from utils.text_processing import conceptTokenize
+from .model.reader_utils import text_to_batch
+from .model.prepare_batch import load_text_batch
+from .utils import text_processing
+from .utils.text_processing import conceptTokenize
 
 def dataToTorch(normalizing_data, vocab, maxlen=20):
     '''
