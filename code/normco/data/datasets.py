@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import torch as th
 import torch.nn as nn
-from smart_open import smart_open
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 from torch.utils.data import Dataset
@@ -12,9 +11,7 @@ from collections import defaultdict
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.nn.utils.rnn import pad_packed_sequence
 
-import entity_normalization.model.scoring as scoring
-from utils import text_processing
-from entity_normalization.model.prepare_batch import load_text_batch
+from..model.prepare_batch import load_text_batch
 
 th.manual_seed(7)
 np.random.seed(7)

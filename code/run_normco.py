@@ -6,6 +6,8 @@ from data_process import construct_graph,data_split
 from normco.trainer import NormCoTrainer
 # from edit_distance import EditDistance_Classifier
 from normco.data.data_generator import DataGenerator
+from normco.data.datasets import PreprocessedDataset
+from torch.utils.data import DataLoader
 #set up seed         
 def setup_seed(seed):
     random.seed(seed)
@@ -24,7 +26,9 @@ if __name__ == '__main__':
 
 
     #,max_depth,max_nodes,search_method
-    parser.add_argument('--max-depth',type=int,default=3,help='number of maximum')
+    parser.add_argument('--max-depth',type=int,default=2,help='number of maximum depth')
+    parser.add_argument('--max-nodes', type=int, default=3, help='number of maximum nodes')
+    parser.add_argument('--search-method', type=str, default='bfs', help='how to search')
 
     # training arguments
     parser.add_argument('--model', type=str, help='The RNN type for coherence',
@@ -32,6 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, help='The number of epochs to run', default=10)
     parser.add_argument('--batch_size', type=int, help='Batch size for mini batching', default=32)
     parser.add_argument('--sequence_len', type=int, help='The sequence length for phrases', default=20)
+    parser.add_argument('--embedding_dim', type=int, help='embedding dimension', default=128)
     parser.add_argument('--num_neg', type=int, help='The number of negative examples', default=1)
     parser.add_argument('--output_dim', type=int, help='The output dimensionality', default=200)
     parser.add_argument('--lr', type=float, help='The starting learning rate', default=0.001)
@@ -90,7 +95,8 @@ if __name__ == '__main__':
                     'test': concepts_test
 
                 }
-                data_dicts,vocab = data_generator.prepare_data(concepts,mentions,edges,synonym_pairs,concept2id)
+                num_neg = args.num_neg
+                data_dicts,vocab = data_generator.prepare_data(concepts,mentions,synonym_pairs,edges,concept2id)
                 # import dataset from def __init__(self, concept_dict,data_dict, num_neg, vocab_dict=None, use_features=False):
 
                 mention_data_train = PreprocessedDataset(concept2id,data_dicts['train']['mentions'],num_neg,vocab,False)
@@ -102,24 +108,9 @@ if __name__ == '__main__':
                 mention_data_test = PreprocessedDataset(concept2id,data_dicts['test']['mentions'],num_neg,vocab,False)
                 coherence_data_test = PreprocessedDataset(concept2id, data_dicts['test']['hierarchy'], num_neg, vocab,
                                                            False)
-                mention_train_loader = DataLoader(
-                mention_data_train,
-                batch_size=args.batch_size,
-                shuffle=True,
-                num_workers=args.threads,
-                collate_fn=mention_data.collate
-            )
-                coherence_train_loader = DataLoader(
-                    mention_data_train,
-                    batch_size=args.batch_size,
-                    shuffle=True,
-                    num_workers=args.threads,
-                    collate_fn=mention_data.collate
-                )
-
 
                 trainer = NormCoTrainer(args)
-                trainer.train(mention_train_loader,coherence_train_loader,mention_data_valid,coherence_data_valid)
+                trainer.train(mention_data_train,coherence_data_train,mention_data_valid,coherence_data_valid)
                 accu1,accu5 = classifier.eval(mentions_test,concepts_test)
                 print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
                 break

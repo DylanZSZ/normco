@@ -8,6 +8,7 @@ from nltk.tokenize import sent_tokenize as nltk_sent_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.porter import *
 from nltk.stem import WordNetLemmatizer
+
 stop_words = set(stopwords.words('english'))
 
 SENTENCE_SPLIT_REGEX = re.compile(r'\s+')
@@ -61,7 +62,7 @@ def stem_and_lemmatize(tokens, stem=True, lemmatize=True):
 
     Returns:
         The list of tokens stemmed and lemmatized
-    
+
     """
     if stem:
         stemmer = PorterStemmer()
@@ -106,12 +107,14 @@ def sent_tokenize(document, tokenizer='nltk'):
     else:
         return re.split(document, DOC_SPLIT_REGEX)
 
+
 def conceptTokenize(sentence, tokenizer='nltk'):
     nostops = " ".join([t for t in word_tokenize(sentence) if t not in stop_words])
     if tokenizer in 'nltk':
         return word_tokenize(clean_text(nostops, removePunct=True))
     else:
         return word_tokenize(clean_text(nostops, removePunct=False), tokenizer='spaces')
+
 
 def getFeatureMap(toks, syns):
     """
@@ -128,11 +131,11 @@ def getFeatureMap(toks, syns):
     acronym = 0.0
     stem_overlap = 0.0
     stemmer = PorterStemmer()
-    
-    #tokenize the text
-    #nostops = " ".join([t for t in word_tokenize(text) if t not in stop_words])
-    #toks = word_tokenize(clean_text(nostops, removePunct=True))
-    
+
+    # tokenize the text
+    # nostops = " ".join([t for t in word_tokenize(text) if t not in stop_words])
+    # toks = word_tokenize(clean_text(nostops, removePunct=True))
+
     for syn_toks in syns:
         acro = ''.join([t[0] for t in syn_toks])
 
@@ -140,7 +143,7 @@ def getFeatureMap(toks, syns):
             if acro == t:
                 acronym = 1.0
                 break
-                
+
         for t in toks:
             for s in syn_toks:
                 if s == t:
@@ -260,7 +263,7 @@ def preprocess_sentence(sentence, vocab, length=10):
         sentence (string):      The input sentence
         vocab (dict):           The target vocabulary (string, int)
         length (int):           The normalized sentence length or None to maintain original lengths
-    
+
     Returns:
         List[int]: List of word indices
     """
@@ -285,7 +288,7 @@ def normalize_sentence_length(ids, vocab, front_padding=True, length=10, padId=N
                                 to the front or back of the string
         length (int):           The target length
         padId (int):            ID to use for padding or None to use vocabulary's pad token
-    
+
     Returns:
         List[int]: List of word indices with normalized length
     """
@@ -315,6 +318,6 @@ def tokens_to_ids(tokens, vocab):
     Returns:
         List[int]: List of word indices in the vocab
     """
-    ids = [vocab[t] if t in vocab else vocab[UNK_TOKEN] for t in tokens]
-
+    # ids = [vocab[t] if t in vocab else vocab[UNK_TOKEN] for t in tokens]
+    ids = [vocab[t] for t in tokens]
     return ids

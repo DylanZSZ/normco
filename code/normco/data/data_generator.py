@@ -17,6 +17,7 @@ from ..utils.text_processing import clean_text
 from ..utils.text_processing import load_dict_from_vocab_file
 from ..utils.text_processing import tokens_to_ids
 from..model.prepare_batch import load_text_batch
+from ..model.reader_utils import text_to_batch
 # from torch.nn import embeddings
 import networkx as nx
 from networkx import Graph,DiGraph
@@ -40,16 +41,18 @@ class HierarchyGraph:
         return graph
     def get_neighbor_idx(self,target,max_depth=3,max_nodes=10,search_method='bfs'):
         ls_neighbors = []
-        if search_method=='bfs':
-            # get the end node for each edge
-            ls_neighbors = [i[1] for i in nx.bfs_edges(self.graph,target,max_depth)]
-            #prune the list of neighbors
-            ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
-        elif search_method=='dfs':
-            # get the end node for each edge
-            ls_neighbors = [i[1] for i in nx.dfs_edges(self.graph,target,max_depth)]
-            #prune the list of neighbors
-            ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
+        if target in self.graph:
+            if search_method=='bfs':
+                # get the end node for each edge
+                ls_neighbors = [i[1] for i in nx.bfs_edges(self.graph,target,max_depth)]
+                #prune the list of neighbors
+                ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
+            elif search_method=='dfs':
+                # get the end node for each edge
+                ls_neighbors = [i[1] for i in nx.dfs_edges(self.graph,target,max_depth)]
+                #prune the list of neighbors
+                ls_neighbors = ls_neighbors[:min(max_nodes,len(ls_neighbors))]
+
         return ls_neighbors
 
 
@@ -69,7 +72,6 @@ class DataGenerator:
         print("CREATING VOCABULARY...\n")
         vocab = set()
         for (mention,concept) in all_data_pairs:
-            print(mention,concept)
             mention = " ".join([t for t in word_tokenize(mention) if t not in stop_words])
             concept = " ".join([t for t in word_tokenize(concept) if t not in stop_words])
             mention_tokens = set(word_tokenize(clean_text(mention, removePunct=True, lower=False)))
@@ -121,6 +123,9 @@ class DataGenerator:
         vocab = set([k.lower() for k in vocab])
         vocab.update({'<pad>','<unk>'})
         vocab = sorted(vocab)
+        vocab_dict = {}
+        for i in range(len(vocab)):
+            vocab_dict[vocab[i]]=i
         # with open(vocabFileName, 'w', encoding='utf-8') as f:
         #     f.write('<pad>\n')
         #     f.write('<unk>\n')
@@ -181,27 +186,11 @@ class DataGenerator:
         #
         #     concept_init = np.asarray(concept_init)
         #     np.save(conceptInitFileName, concept_init)
-        return vocab
+        return vocab_dict
     def read_vocab(self,vocab_dir):
         return load_dict_from_vocab_file(vocab_dir)
     #original input for examples:  a list whose elements are [v[1],v[0]]
     # example is of format [mention,related-ids]
-    def load_text_batch(self,examples, vocab, maxlen=20, precleaned=False):
-        words = []
-        lens = []
-        ids = []
-
-        for ex in examples:
-            w_curr = []
-            words_curr, word_len = text_to_batch(ex[0],
-                                                 vocab,
-                                                 maxlen=maxlen,
-                                                 precleaned=precleaned)
-            lens.append(word_len)
-            words.append(np.asarray(words_curr))
-            ids.append(np.asarray(ex[1:]))
-        seq_len = len(words)
-        return np.asarray(words), np.asarray(lens), np.asarray(ids), seq_len
 
     def save_data(self,dir,words,lens,ids,seqlens):
         np.savez(dir, words=np.expand_dims(words, 1),
@@ -226,7 +215,7 @@ class DataGenerator:
 
     def gen_data_dict(self,concepts,mentions,coherence_data,vocab,concept2id):
         data_dicts = {}
-        for k in concept.keys():
+        for k in concepts.keys():
             concept_ls = concepts[k]
             mention_ls = mentions[k]
             #mentions
@@ -238,14 +227,14 @@ class DataGenerator:
                 "words":np.expand_dims(mwords,1),
                 "lens":np.expand_dims(mlens,1),
                 "ids":np.expand_dims(mids,1),
-                'seq_lens':np.expand_dims(mseqlens,1)
+                'seq_lens':np.expand_dims(np.asarray([[mseqlens]]),1)
 
             }
             h_dict = {
                 "words": np.expand_dims(hwords, 1),
                 "lens": np.expand_dims(hlens, 1),
                 "ids": np.expand_dims(hids, 1),
-                'seq_lens': np.expand_dims(hseqlens, 1)
+                'seq_lens': np.expand_dims(np.asarray([[hseqlens]]), 1)
 
                     }
             data_dicts[k] = {'mentions':m_dict,'hierarchy':h_dict}
@@ -279,7 +268,6 @@ class DataGenerator:
             ls_mentions = ls_mentions + mentions[i]
         vocab = self.create_vocab(paired_data,None,True)
         concept_graph = self.build_graph(tree)
-
         related_concepts = self.get_related_concept_ls(concept_graph,concept2id,paired_data)
         data_dicts = self.gen_data_dict(concepts,mentions,related_concepts,vocab,concept2id)
         return data_dicts,vocab

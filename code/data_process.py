@@ -136,7 +136,6 @@ def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
     
     #random split
     if is_unseen == False:
-        print(is_unseen)
         for _ in range(3):
             mentions_train,mentions_test,concepts_train,concepts_test = train_test_split(
                 mentions,concepts,test_size=test_size)#have already set up seed 

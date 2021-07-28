@@ -25,9 +25,10 @@ np.random.seed(7)
 class NormCoTrainer:
     def __init__(self,args):
         self.args = args
-        self.model,self.optimizer,self.loss = self._build_model(args)
+        self.model,self.optimizer,self.loss = None,None,None
 
-    def _build_model(self,args):
+    def _build_model(self,args,coherence_data):
+        output_dim=2
         sparse = True
         if args.optimizer in 'adam':
             sparse = False
@@ -37,34 +38,32 @@ class NormCoTrainer:
         elif args.model in "LSTM":
             rnn = nn.LSTM
 
-        embedding_dim = args.output_dim
-        output_dim = args.output_dim
-
         # Pick the distance function
         margin = np.sqrt(output_dim)
         if args.scoring_type in "euclidean":
-            distance_fn = scoring.EuclideanDistance()
+            distance_fn = EuclideanDistance()
         if args.scoring_type in "cosine":
-            distance_fn = scoring.CosineSimilarity(dim=-1)
+            distance_fn = CosineSimilarity(dim=-1)
             margin = args.num_neg - 1
         elif args.scoring_type in "bilinear":
-            distance_fn = scoring.BilinearMap(output_dim)
+            distance_fn = BilinearMap(output_dim)
             margin = 1.0
 
         # Load concept embeddings initializer
-        disease_embs_init = None
-        if args.disease_embeddings_file:
-            disease_embs_init = np.load(args.disease_embeddings_file)
-
-        # Load initial word embeddings
-        embeddings_init = np.load(args.embeddings_file)
+        # disease_embs_init = None
+        # if args.disease_embeddings_file:
+        #     disease_embs_init = np.load(args.disease_embeddings_file)
+        #
+        # # Load initial word embeddings
+        # embeddings_init = np.load(args.embeddings_file)
 
         # Create the normalization model
         model = NormalizationModel(len(coherence_data.id_dict.keys()),
-                                     disease_embeddings_init=disease_embs_init,
-                                     phrase_embeddings_init=embeddings_init,
+                                     disease_embeddings_init=None,
+                                     phrase_embeddings_init=None,
+                                     vocab_size = len(coherence_data.id_vocab.keys()),
                                      distfn=distance_fn,
-                                     rnn=rnn, embedding_dim=embedding_dim, output_dim=output_dim,
+                                     rnn=rnn, embedding_dim=args.embedding_dim, output_dim=output_dim,
                                      dropout_prob=args.dropout_prob, sparse=sparse,
                                      use_features=args.use_features)
 
@@ -100,8 +99,23 @@ class NormCoTrainer:
         if args.weight_init:
             model.load_state_dict(th.load(args.weight_init))
         return model,optimizer,loss
-    def train(self,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid):
-        self._train(self.model,self.optimizer,self.loss,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid,**args)
+    def train(self,mention_train,coherence_train,mention_valid,coherence_valid):
+        self.model,self.optimizer,self.loss  = self._build_model(self.args,coherence_train)
+        mention_train_loader = DataLoader(
+            mention_train,
+            batch_size=self.args.batch_size,
+            shuffle=True,
+            num_workers=self.args.threads,
+            collate_fn=mention_train.collate
+        )
+        coherence_train_loader = DataLoader(
+            coherence_train,
+            batch_size=self.args.batch_size,
+            shuffle=True,
+            num_workers=self.args.threads,
+            collate_fn=coherence_train.collate
+        )
+        self._train(self.model,self.optimizer,self.loss,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid)
 
     def _train(self,model, optimizer, loss_fn,mention_train_loader,coherence_train_loader,mention_valid,coherence_valid,
               log_dir='./tb', n_epochs=100, save_every=1, save_file_name='model.pth', eval_data=None, eval_every=10,
