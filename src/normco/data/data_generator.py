@@ -1,4 +1,5 @@
 import argparse
+import pandas as pd
 import re
 import string
 import numpy as np
@@ -15,9 +16,8 @@ from ..utils.text_processing import word_tokenize
 from ..utils.text_processing import clean_text
 from ..utils.text_processing import load_dict_from_vocab_file
 from ..utils.text_processing import tokens_to_ids
-from ..data.data_utils import *
-# from..data.data_utils import load_text_batch
-# from ..model.reader_utils import text_to_batch
+from..model.prepare_batch import load_text_batch
+from ..model.reader_utils import text_to_batch
 # from torch.nn import embeddings
 import networkx as nx
 from networkx import Graph,DiGraph
@@ -84,6 +84,25 @@ class DataGenerator:
                 vocab.update(mention_tokens)
                 vocab.update(set([t.lower() for t in mention_tokens]))
 
+        # for mention in mentions:
+        #     mention = " ".join([t for t in word_tokenize(mention) if t not in stop_words])
+        #     tokens = set(word_tokenize(clean_text(mention, removePunct=True, lower=False)))
+        #     vocab.update(tokens)
+        #     vocab.update(set([t.lower() for t in tokens]))
+        #
+        # # Uncomment this to use dictionary as well
+        # for concept in concepts:
+        #     concept = " ".join([t for t in word_tokenize(concept) if t not in stop_words])
+        #     tokens = set(word_tokenize(clean_text(concept, removePunct=True, lower=False)))
+        #     vocab.update(tokens)
+        #     vocab.update(set([t.lower() for t in tokens]))
+            # if row[7] not in '':
+            #     for syn in row[7].split('|'):
+            #         a = " ".join([t for t in word_tokenize(syn) if t not in stop_words])
+            #         tokens = set(word_tokenize(clean_text(a, removePunct=True, lower=False)))
+            #         vocab.update(tokens)
+            #         vocab.update(set([t.lower() for t in tokens]))
+
         print("RESOLVING DUPLICATE VOCAB TOKENS...\n")
         # Resolve same word different case
         network = defaultdict(set)
@@ -110,7 +129,72 @@ class DataGenerator:
         vocab_dict = {}
         for i in range(len(vocab)):
             vocab_dict[vocab[i]]=i
+        # with open(vocabFileName, 'w', encoding='utf-8') as f:
+        #     f.write('<pad>\n')
+        #     f.write('<unk>\n')
+        #     for k in sorted(vocab):
+        #         # for k in final_vocab:
+        #         f.write(k.lower() + '\n')
+        '''
+        The following code was originally used to find duplicates and match case with the dictionary in the
+        pretrained embeddings which we may not need. 
+        '''
+        # for d in duplicates:
+        #     vocab = vocab - network[d]
+        #     found = None
+        #     for candidate in list(network[d]):
+        #         if candidate in wv:
+        #             if found is None:
+        #                 found = (candidate, wv.vocab[candidate].count)
+        #             elif wv.vocab[candidate].count > found[1]:
+        #                 found = (candidate, wv.vocab[candidate].count)
+        #     if found is None:
+        #         # just use lowercase version
+        #         vocab.add(d)
+        #     else:
+        #         vocab.add(found[0])
+
+        # if self.args.init_embedding:
+        #     print("CREATING INITIAL WORD EMBEDDINGS...\n")
+        #     embeddings = []
+        #     final_vocab = []
+        #     # For pad and unknown
+        #     embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #     embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #     count = 0
+        #     for v in sorted(vocab):
+        #         if v not in wv:
+        #             count += 1
+        #             embeddings.append(np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,)))
+        #         else:
+        #             embeddings.append(wv[v])
+        #
+        #     embeddings = np.asarray(embeddings)
+        #     np.save(embeddingInitFileName, embeddings)
+        #     print("CREATING INITIAL CONCEPT EMBEDDINGS...\n")
+        #     vocab_dict = load_dict_from_vocab_file(vocabFileName)
+        #     if use_unk_concept:
+        #         # First is UNK
+        #         concept_init = [np.random.normal(loc=mean, scale=np.sqrt(var), size=(wv.vector_size,))]
+        #         rows = concept_dict.values[1:]
+        #     else:
+        #         concept_init = []
+        #         rows = concept_dict.values
+        #
+        #     for row in rows:
+        #         nostops = " ".join([t for t in word_tokenize(row[0]) if t not in stop_words])
+        #         toks = word_tokenize(clean_text(nostops, removePunct=True))
+        #         ids = tokens_to_ids(toks, vocab_dict)
+        #         concept_init.append(np.sum([embeddings[i] for i in ids], axis=0))
+        #
+        #     concept_init = np.asarray(concept_init)
+        #     np.save(conceptInitFileName, concept_init)
         return vocab_dict
+    def read_vocab(self,vocab_dir):
+        return load_dict_from_vocab_file(vocab_dir)
+    #original input for examples:  a list whose elements are [v[1],v[0]]
+    # example is of format [mention,related-ids]
+
     def save_data(self,dir,words,lens,ids,seqlens):
         np.savez(dir, words=np.expand_dims(words, 1),
                  lens=np.expand_dims(lens, 1),
@@ -159,10 +243,11 @@ class DataGenerator:
             concept_ls = concept_ids[k]
             mention_ls = mentions[k]
             #mentions only data (isolated points)
-            if len(isolated_nodes)>0:
-                mwords, mlens, mids, mseqlens = load_text_batch([[mention_ls[i],[concept_ls[i]]] for i in range(len(concept_ls)) if mention_ls[i] in isolated_nodes],vocab,20)
 
-            #data with context information
+
+            mwords, mlens, mids, mseqlens = load_text_batch([[mention_ls[i],[concept_ls[i]]] for i in range(len(concept_ls)) if mention_ls[i] in isolated_nodes],vocab,20)
+            #hierarchy data
+            # hwords, hlens, hids, hseqlens = load_text_batch([[mention,coherence_data[mention]] for mention in mention_ls], vocab,20)
             hwords, hlens, hids, hseqlens = [],[],[],[]
             for mention in mention_ls:
                 if mention not in isolated_nodes:
@@ -190,6 +275,15 @@ class DataGenerator:
             data_dicts[k] = {'mentions':m_dict,'hierarchy':h_dict}
         return data_dicts
 
+        # mwords, mlens, mids, mseqlens = load_text_batch([[v[1], v[0]] for v in data], vocab, id_dict, 20)
+        # m_usefeatures = np.asarray([r[2] != ' ' for r in dictdb])
+        # mseqlens = np.asarray([[1] for i in range(mseqlens)])
+        # np.savez(args.trainset_dictionary_preprocessed_file, words=np.expand_dims(mwords, 1),
+        #          lens=np.expand_dims(mlens, 1),
+        #          ids=np.expand_dims(mids, 1), seq_lens=np.expand_dims(mseqlens, 1))
+    #concepts and mentions:
+    # dicts {'train':list,'valid':list,'test':list}
+
     #paired_data:
     def prepare_data(self,concepts,mentions,paired_data,tree,mention2id):
         '''
@@ -201,7 +295,17 @@ class DataGenerator:
         gen dictionary data
         gen coherence data
         '''
+        #concept2id used as dict
 
+        #first generate vocabulary
+        # ls_concepts = []
+        # ls_mentions = []
+        # for i in concepts.keys():
+        #     ls_concepts = ls_concepts + concepts[i]
+        #     ls_mentions = ls_mentions + mentions[i]
+
+        # TODO: convert to set
+        # create_vocab: input: (mention,concept_id_pair) output: vocab_dict
         vocab = self.create_vocab(mention2id,False,None,True)
         #input: mention2id dict, output: conceptid_to_mentions dict
         concept2mentions = self.group_mentions(mention2id)

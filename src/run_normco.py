@@ -3,7 +3,7 @@ import random
 import os
 import argparse
 from data_process import load_data,data_split
-from normco_trainer import NormCoTrainer
+from normco.trainer import NormCoTrainer
 # from edit_distance import EditDistance_Classifier
 from normco.data.data_generator import DataGenerator
 from normco.data.datasets import PreprocessedDataset
@@ -28,7 +28,8 @@ if __name__ == '__main__':
     #,max_depth,max_nodes,search_method
     parser.add_argument('--max-depth',type=int,default=2,help='number of maximum depth')
     parser.add_argument('--max-nodes', type=int, default=3, help='number of maximum nodes')
-    parser.add_argument('--search-method', type=str, default='bfs', help='algorithm used to traverse the graph to generate context information for each node')
+    parser.add_argument('--search-method', type=str, default='bfs', help='how to search')
+
     # training arguments
     parser.add_argument('--model', type=str, help='The RNN type for coherence',
                             default='GRU', choices=['LSTM', 'GRU'])
@@ -52,12 +53,14 @@ if __name__ == '__main__':
     # Using SGD gives errors https://github.com/pytorch/pytorch/issues/30402
     parser.add_argument('--loss', type=str, help='Which loss function to use', default='maxmargin',
                         choices=['maxmargin', 'xent'])
-    parser.add_argument('--eval_every', type=int, help='Number of epochs between each evaluation', default=2)
+    parser.add_argument('--eval_every', type=int, help='Number of epochs between each evaluation', default=0)
     parser.add_argument('--disease_dict', type=str, help='The location of the disease dictionary', default=None)
     parser.add_argument('--labels_file', type=str, help='Labels file for inline evaluation', default=None)
     parser.add_argument('--banner_tags', type=str, help='Banner tagged documents for inline evaluation',
                             default=None)
-
+    parser.add_argument('--test_features_file', type=str,
+                            help='File containing test features when features are used',
+                            default=None)
     parser.add_argument('--use_features', action='store_true', help='Whether or not to use hand crafted features',
                             default=False)
     parser.add_argument('--mention_only', action='store_true', help='Whether or not to use mentions only',
@@ -113,7 +116,7 @@ if __name__ == '__main__':
             n_vocab = len(vocab.keys())
             trainer.train(mention_data_train,coherence_data_train,mention_data_valid,coherence_data_valid,n_concepts,n_vocab)
             trainer.evaluate(mention_data_test,coherence_data_test)
-            
+            accu1,accu5 = classifier.eval(mentions_test,concepts_test)
             print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
             break
 

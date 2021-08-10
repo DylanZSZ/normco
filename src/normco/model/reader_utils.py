@@ -1,5 +1,4 @@
 import numpy as np
-from ..utils.text_processing import tokens_to_ids
 import collections
 from nltk.corpus import stopwords
 from ..utils.text_processing import word_tokenize
@@ -9,31 +8,7 @@ from ..utils.text_processing import clean_text
 from ..utils.text_processing import tokens_to_ids
 from ..utils.text_processing import normalize_sentence_length
 
-
-def load_text_batch(examples, vocab, maxlen=20, precleaned=False):
-    words = []
-    lens = []
-    ids = []
-
-    for ex in examples:
-        if ex[1] == []:
-            pass
-        else:
-            w_curr = []
-            words_curr, word_len = text_to_batch(ex[0],
-                                                 vocab,
-                                                 maxlen=maxlen,
-                                                 precleaned=precleaned)
-            lens.append(word_len)
-            words.append(words_curr)
-            ids.append(ex[1])
-    seq_len = len(words)
-
-    return np.asarray(words), np.asarray(lens), np.asarray(ids), seq_len
-
-
 stop_words = set(stopwords.words('english'))
-
 
 def text_to_batch(text, vocab, maxlen=20, precleaned=False):
     '''
@@ -55,14 +30,13 @@ def text_to_batch(text, vocab, maxlen=20, precleaned=False):
 
     # Convert to ids
     ids = tokens_to_ids(toks, vocab)
-
+    
     # Normalize the length
     length = min(maxlen, len(ids))
     ids = normalize_sentence_length(ids, vocab, front_padding=False, length=maxlen, padId=0)
-
+    
     # Return the IDs and length
     return np.asarray(ids), length
-
 
 def text_to_char_batch(text, vocab, char_vocab, maxlen=20, max_char_len=50, frequency_feature=False):
     '''
@@ -102,10 +76,10 @@ def text_to_char_batch(text, vocab, char_vocab, maxlen=20, max_char_len=50, freq
         # Normalize lengths
         char_ids = normalize_sentence_length(char_ids, char_vocab, front_padding=False, length=max_char_len, padId=0)
         chars_curr = np.asarray(char_ids)
-
+    
     # Convert tokens to ids and normalize length
     ids = tokens_to_ids(toks, vocab)
     length = min(maxlen, len(ids))
     ids = normalize_sentence_length(ids, vocab, front_padding=False, length=maxlen, padId=0)
-
+    
     return np.asarray(ids), length, chars_curr, char_lens_curr

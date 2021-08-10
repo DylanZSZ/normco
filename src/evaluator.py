@@ -37,12 +37,8 @@ class Evaluator():
         """
         scores,preds = get_sorted_top_k(score_matrix,top_k=top_k,reverse = True)#preds: shape(n_samples,top_k)
         labels = labels.reshape(-1,1).repeat(top_k,axis = -1)# repeat at the last dimension
-        print(preds.shape)
-        print(labels.shape)
         correctness = labels==preds
-
-        correctness = correctness.astype("float")
-        return correctness.sum()/len(labels),correctness.sum(),len(labels)
+        return correctness.sum()/len(labels)
 
 
 
