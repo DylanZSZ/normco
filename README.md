@@ -12,26 +12,9 @@ We can use ontologies.jsonld to catch up all the datasets on the website and fil
 Also, for convenience, I implement the extraction of synonym entries for every Term on single dataset and the split of dataset(under two different settings).  
 See data_process.py for more details.
 
-# Code
+# Run
 
-## model.py 
-a simple baseline based on Edit Distance
-
-## main.py 
-carry on following commands to run the baseline or your models
-
-'''
-python main.py
-'''
-
-## evaluator.py
-
-For evaluation. 
-
-
-
-
-
+To run the program, direct yourself under ```/code ``` and run bash script run_normco.sh
 
 
 
