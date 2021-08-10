@@ -2,8 +2,12 @@
 conda create -n syn python=3.8  
 conda activate syn  
 conda install numpy tqdm scikit-learn  
+conda install nltk
+conda install networkx
+conda install spacy
+conda install pandas
+conda inst
 pip install Levenshtein  
-
 
 
 # Datasets
@@ -16,6 +20,11 @@ See data_process.py for more details.
 
 To run the program, direct yourself under ```/code ``` and run bash script run_normco.sh
 
+# Notes
+
+
+
+# TODOs
 
 
 
