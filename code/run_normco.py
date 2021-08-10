@@ -8,6 +8,7 @@ from normco_trainer import NormCoTrainer
 from normco.data.data_generator import DataGenerator
 from normco.data.datasets import PreprocessedDataset
 from torch.utils.data import DataLoader
+from data_process import *
 #set up seed         
 def setup_seed(seed):
     random.seed(seed)
@@ -18,17 +19,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # data processing arguments
     parser = argparse.ArgumentParser(description="Generate data and datasets for training and evaluation")
-
+    parser.add_argument('--data_dir',type=str,help='direct to dataset file')
+    parser.add_argument('--require_download',type=bool,default=False,help='whether to download data from directory file')
+    parser.add_argument('--directory_file',type=str,default=None,help='the location of the directory file based upon which we retrieve data')
     parser.add_argument('--use_unk_concept', action='store_true',
                         help='Whether or not to use a special concept for "UNKNOWN"', default=False)
-
     parser.add_argument('--init_embedding', type=bool, default=False, help='if need initial embeddings')
-
-
     #,max_depth,max_nodes,search_method
-    parser.add_argument('--max-depth',type=int,default=2,help='number of maximum depth')
-    parser.add_argument('--max-nodes', type=int, default=3, help='number of maximum nodes')
-    parser.add_argument('--search-method', type=str, default='bfs', help='algorithm used to traverse the graph to generate context information for each node')
+    parser.add_argument('--max_depth',type=int,default=2,help='number of maximum depth')
+    parser.add_argument('--max_nodes', type=int, default=3, help='number of maximum nodes')
+    parser.add_argument('--search_method', type=str, default='bfs', help='algorithm used to traverse the graph to generate context information for each node')
     # training arguments
     parser.add_argument('--model', type=str, help='The RNN type for coherence',
                             default='GRU', choices=['LSTM', 'GRU'])
@@ -53,10 +53,6 @@ if __name__ == '__main__':
     parser.add_argument('--loss', type=str, help='Which loss function to use', default='maxmargin',
                         choices=['maxmargin', 'xent'])
     parser.add_argument('--eval_every', type=int, help='Number of epochs between each evaluation', default=2)
-    parser.add_argument('--disease_dict', type=str, help='The location of the disease dictionary', default=None)
-    parser.add_argument('--labels_file', type=str, help='Labels file for inline evaluation', default=None)
-    parser.add_argument('--banner_tags', type=str, help='Banner tagged documents for inline evaluation',
-                            default=None)
 
     parser.add_argument('--use_features', action='store_true', help='Whether or not to use hand crafted features',
                             default=False)
@@ -66,16 +62,19 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     setup_seed(0)
-    dir = '../data/datasets'
-    print(dir)
-    for d,_,files in os.walk(dir):
+    if args.require_download:
+        assert directory_file is not None
+        get_all_data(args.directory_file,args.data_dir)
+        print("data downloading done")
+
+    for d,_,files in os.walk(args.data_dir):
         print(files)
         for filename in files:
             print(filename)
             #if filename=='envo.obo':continue# envo.obo has a specific problem and I am not sure why.
             # concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph(os.path.join(dir,filename))
             #np.array(name_array), np.array(query_id_array), mention2id, edge_index,edges
-            concept_array,query2id_array,mention2id,_,edges = load_data(os.path.join(dir,filename),True)
+            concept_array,query2id_array,mention2id,_,edges = load_data(os.path.join(args.data_dir,filename),True)
             print(filename,'number of synonym pairs',len(mention2id))
             # each pair contains queries(mentions) and their ids
             queries_train,queries_valid,queries_test =  data_split(query2id_array,is_unseen=True,test_size=0.33)
@@ -113,9 +112,3 @@ if __name__ == '__main__':
             n_vocab = len(vocab.keys())
             trainer.train(mention_data_train,coherence_data_train,mention_data_valid,coherence_data_valid,n_concepts,n_vocab)
             trainer.evaluate(mention_data_test,coherence_data_test)
-            
-            print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
-            break
-
-
-    

@@ -210,7 +210,8 @@ class DataGenerator:
 
         # graph becomes all ids
         # construct id2mention dictionary --> get available mentions from data to construct the coherence model
-        related_mentions_dict,isolated_nodes = self.get_related_concept_ls(concept_graph,concept2mentions,mention2id,n_context_cutoff=5)
+        related_mentions_dict,isolated_nodes = \
+            self.get_related_concept_ls(concept_graph,concept2mentions,mention2id,n_context_cutoff=self.args.sequence_len)
         #concepts list of ids used
         data_dicts = self.gen_data_dict(concepts,mentions,related_mentions_dict,isolated_nodes,vocab)
         return data_dicts,vocab
