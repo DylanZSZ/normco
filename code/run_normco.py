@@ -2,7 +2,7 @@ import numpy as np
 import random
 import os
 import argparse
-from data_process import construct_graph,data_split
+from data_process import load_data,data_split
 from normco.trainer import NormCoTrainer
 # from edit_distance import EditDistance_Classifier
 from normco.data.data_generator import DataGenerator
@@ -33,11 +33,11 @@ if __name__ == '__main__':
     # training arguments
     parser.add_argument('--model', type=str, help='The RNN type for coherence',
                             default='GRU', choices=['LSTM', 'GRU'])
-    parser.add_argument('--num_epochs', type=int, help='The number of epochs to run', default=10)
+    parser.add_argument('--num_epochs', type=int, help='The number of epochs to run', default=1)
     parser.add_argument('--batch_size', type=int, help='Batch size for mini batching', default=32)
     parser.add_argument('--sequence_len', type=int, help='The sequence length for phrases', default=20)
     parser.add_argument('--embedding_dim', type=int, help='embedding dimension', default=128)
-    parser.add_argument('--num_neg', type=int, help='The number of negative examples', default=1)
+    parser.add_argument('--num_neg', type=int, help='The number of negative examples', default=20)
     parser.add_argument('--output_dim', type=int, help='The output dimensionality', default=200)
     parser.add_argument('--lr', type=float, help='The starting learning rate', default=0.001)
     parser.add_argument('--l2reg', type=float, help='L2 weight decay', default=0.0)
@@ -48,8 +48,9 @@ if __name__ == '__main__':
     parser.add_argument('--threads', type=int, help='Number of parallel threads to run', default=1)
     parser.add_argument('--save_every', type=int, help='Number of epochs between each model save', default=1)
     parser.add_argument('--save_file_name', type=str, help='Name of file to save model to', default='model.pth')
-    parser.add_argument('--optimizer', type=str, help='Which optimizer to use', default='sgd',
+    parser.add_argument('--optimizer', type=str, help='Which optimizer to use', default='adam',
                             choices=['sgd', 'rmsprop', 'adagrad', 'adadelta', 'adam'])
+    # Using SGD gives errors https://github.com/pytorch/pytorch/issues/30402
     parser.add_argument('--loss', type=str, help='Which loss function to use', default='maxmargin',
                         choices=['maxmargin', 'xent'])
     parser.add_argument('--eval_every', type=int, help='Number of epochs between each evaluation', default=0)
@@ -75,45 +76,49 @@ if __name__ == '__main__':
         for filename in files:
             print(filename)
             #if filename=='envo.obo':continue# envo.obo has a specific problem and I am not sure why.
-            concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph(os.path.join(dir,filename))
-            print(filename,'number of synonym pairs',len(synonym_pairs))
-            if len(synonym_pairs)<10 or len(synonym_pairs)>10000:continue#modify the two number to control how many datasets will be tested.
-            datasets_folds =  data_split(concept_list=concept_list,synonym_pairs=synonym_pairs,is_unseen=True,test_size=0.33)
-            for fold,data_fold in enumerate(datasets_folds):
-                mentions_train,concepts_train,mentions_test,concepts_test = data_fold
-                data_generator = DataGenerator(args)
-                #def prepare_data(self,paired_data,tree,concept2id,max_depth,max_nodes,search_method):
-                mentions = {
-                    'train':mentions_train,
-                    'valid':mentions_test,
-                    'test':mentions_test
+            # concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph(os.path.join(dir,filename))
+            #np.array(name_array), np.array(query_id_array), mention2id, edge_index,edges
+            concept_array,query2id_array,mention2id,_,edges = load_data(os.path.join(dir,filename),True)
+            print(filename,'number of synonym pairs',len(mention2id))
+            # each pair contains queries(mentions) and their ids
+            queries_train,queries_valid,queries_test =  data_split(query2id_array,is_unseen=True,test_size=0.33)
+
+            data_generator = DataGenerator(args)
+            #def prepare_data(self,paired_data,tree,concept2id,max_depth,max_nodes,search_method):
+            mentions = {
+                    'train':queries_train,
+                    'valid':queries_valid,
+                    'test':queries_test
 
                 }
-                concepts = {
-                    'train': concepts_train,
-                    'valid': concepts_test,
-                    'test': concepts_test
+            concept_ids = {
+                    'train': [mention2id[i] for i in queries_train],
+                    'valid': [mention2id[i] for i in queries_valid],
+                    'test':[mention2id[i] for i in queries_test]
 
                 }
-                num_neg = args.num_neg
-                data_dicts,vocab = data_generator.prepare_data(concepts,mentions,synonym_pairs,edges,concept2id)
+            num_neg = args.num_neg
+            data_dicts,vocab = data_generator.prepare_data(concept_ids,mentions,query2id_array,edges,mention2id)
                 # import dataset from def __init__(self, concept_dict,data_dict, num_neg, vocab_dict=None, use_features=False):
 
-                mention_data_train = PreprocessedDataset(concept2id,data_dicts['train']['mentions'],num_neg,vocab,False)
-                coherence_data_train = PreprocessedDataset(concept2id, data_dicts['train']['hierarchy'], num_neg, vocab,
+            mention_data_train = PreprocessedDataset(mention2id,data_dicts['train']['mentions'],num_neg,vocab,False)
+            coherence_data_train = PreprocessedDataset(mention2id, data_dicts['train']['hierarchy'], num_neg, vocab,
                                                            False)
-                mention_data_valid = PreprocessedDataset(concept2id,data_dicts['valid']['mentions'],num_neg,vocab,False)
-                coherence_data_valid = PreprocessedDataset(concept2id, data_dicts['valid']['hierarchy'], num_neg, vocab,
+            mention_data_valid = PreprocessedDataset(mention2id,data_dicts['valid']['mentions'],num_neg,vocab,False)
+            coherence_data_valid = PreprocessedDataset(mention2id, data_dicts['valid']['hierarchy'], num_neg, vocab,
                                                            False)
-                mention_data_test = PreprocessedDataset(concept2id,data_dicts['test']['mentions'],num_neg,vocab,False)
-                coherence_data_test = PreprocessedDataset(concept2id, data_dicts['test']['hierarchy'], num_neg, vocab,
+            mention_data_test = PreprocessedDataset(mention2id,data_dicts['test']['mentions'],num_neg,vocab,False)
+            coherence_data_test = PreprocessedDataset(mention2id, data_dicts['test']['hierarchy'], num_neg, vocab,
                                                            False)
 
-                trainer = NormCoTrainer(args)
-                trainer.train(mention_data_train,coherence_data_train,mention_data_valid,coherence_data_valid)
-                accu1,accu5 = classifier.eval(mentions_test,concepts_test)
-                print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
-                break
+            trainer = NormCoTrainer(args)
+            n_concepts = len(mention2id.keys())
+            n_vocab = len(vocab.keys())
+            trainer.train(mention_data_train,coherence_data_train,mention_data_valid,coherence_data_valid,n_concepts,n_vocab)
+            trainer.evaluate(mention_data_test,coherence_data_test)
+            accu1,accu5 = classifier.eval(mentions_test,concepts_test)
+            print(filename,'fold--%d,accu1--%f,accu5--%f'%(fold,accu1,accu5))
+            break
 
 
     

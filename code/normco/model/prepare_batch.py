@@ -30,7 +30,6 @@ def load_text_batch(examples, vocab, maxlen=20, precleaned=False):
 
     for ex in examples:
         if ex[1] == []:
-
             pass
         else:
             w_curr = []
@@ -38,9 +37,9 @@ def load_text_batch(examples, vocab, maxlen=20, precleaned=False):
                                                  vocab,
                                                  maxlen=maxlen,
                                                  precleaned=precleaned)
-            lens.append(np.asarray([word_len]))
-            words.append(np.asarray([words_curr]))
-            ids.append(np.asarray([ex[1]]))
+            lens.append(word_len)
+            words.append(words_curr)
+            ids.append(ex[1])
     seq_len = len(words)
 
     return np.asarray(words), np.asarray(lens), np.asarray(ids), seq_len

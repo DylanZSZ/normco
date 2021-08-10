@@ -24,7 +24,6 @@ class CoherenceModel(nn.Module):
         super(CoherenceModel, self).__init__()
 
         self.input_dim = input_dim
-
         self.rnn_dim = output_dim // 2
         self.rnn = rnn(input_dim, self.rnn_dim, batch_first=True, bidirectional=True)
 
@@ -80,7 +79,7 @@ class SummationModel(nn.Module):
         word_len = examples.size()[2]
 
         # Mask the pad tokens
-        nonzero = (examples != 0).type(th.FloatTensor)
+        nonzero = (examples != 0).type(th.FloatTensor).detach()
         embs = self.embeddings(examples.view(-1, word_len)) * nonzero.view(-1, word_len).unsqueeze(2)
         embs = embs.view(-1, seq_len, word_len, self._e_dim)
 
@@ -172,14 +171,16 @@ class NormalizationModel(nn.Module):
         nneg = inputs['ids'].size()[2]
 
         phrase_rep = self.phrase_model(inputs)
-        disease_embs = self.embeddings(inputs['ids'].view(-1, nneg)).view(-1, dseq_len, nneg,
-                                                                                  self.embedding_dim)
+        disease_embs = self.embeddings(inputs['ids'].view(-1, nneg))
+
+        disease_embs = disease_embs.view(-1, dseq_len, nneg,self.embedding_dim)
 
         linear_input = phrase_rep.view(-1, self.phrase_model._e_dim)
 
         # Embed phrase into concept space
         example_rep = self.L(linear_input).view(-1, wseq_len, self.output_dim)
         mention_rep = example_rep
+
 
         # Coherence vs mention only
         if coherence:
@@ -196,10 +197,10 @@ class NormalizationModel(nn.Module):
         else:
             mention_scores = self.distfn(mention_rep.unsqueeze(2), disease_embs)
             distance_scores = mention_scores
-
-        if self.use_features and coherence:
-            scores = self.score_layer(self.f2(
-                self.feature_layer(th.cat([-inputs['features'], distance_scores.unsqueeze(-1)], dim=-1).view(-1, 5))))
-            return scores.view(-1, dseq_len, nneg)
-        else:
-            return distance_scores
+        return distance_scores
+        # if self.use_features and coherence:
+        #     scores = self.score_layer(self.f2(
+        #         self.feature_layer(th.cat([-inputs['features'], distance_scores.unsqueeze(-1)], dim=-1).view(-1, 5))))
+        #     return scores.view(-1, dseq_len, nneg)
+        # else:
+        #     return distance_scores
